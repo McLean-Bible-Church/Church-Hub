@@ -34,9 +34,17 @@ function parseTenantSlug(hostname: string): { slug: string | null; isCustomDomai
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths (API routes, signin, home, error pages)
+  // API routes are not redirected to /signin; instead every /api route except the
+  // NextAuth endpoints requires a session token here (401 JSON otherwise). This is
+  // defense in depth only — each route handler still performs its own app-level
+  // authorization via requireApiAppAccess / session checks.
+  const isApiPath = pathname === '/api' || pathname.startsWith('/api/');
+  const isPublicApiPath =
+    pathname === '/api/auth' || pathname.startsWith('/api/auth/') || pathname === '/api/manifest'; // PWA manifest is fetched without credentials
+
+  // Allow public paths (NextAuth endpoints, signin, home, error pages)
   const isPublicPath =
-    pathname.startsWith('/api') ||
+    isPublicApiPath ||
     pathname.startsWith('/_next') ||
     pathname === '/signin' ||
     pathname === '/' ||
@@ -114,6 +122,10 @@ export async function middleware(request: NextRequest) {
       });
     }
 
+    if (!token && isApiPath) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Redirect unauthenticated users to sign in
     if (!token) {
       console.log(`Middleware: No token, redirecting to signin from ${pathname}`);
@@ -134,6 +146,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   } catch (error) {
     console.error('Middleware: Error checking auth:', error);
+    if (isApiPath) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const signInUrl = new URL('/signin', request.url);
     signInUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(signInUrl);

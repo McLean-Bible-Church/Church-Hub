@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { auth } from '@church/nextjs-auth';
 import { getCongregations, getHouseholdCongregation } from '@/services/counterService';
 
+/**
+ * GET /api/counter/congregations
+ *
+ * Intentionally session-only (no app permission check): CampusContext calls this
+ * on every app page to populate the campus picker. It returns only the list of
+ * active congregations plus the signed-in user's own household congregation (the
+ * household ID comes from the session, not the request), so no other person's data.
+ */
 export async function GET() {
   try {
     const session = await auth();

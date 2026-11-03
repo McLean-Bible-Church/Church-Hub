@@ -2,7 +2,12 @@ import NextAuth from 'next-auth';
 import { JWT } from 'next-auth/jwt';
 import MinistryPlatform from './provider';
 import { cookies } from 'next/headers';
-import { MinistryPlatformClient, TableService, ProcedureService } from '@church/ministry-platform';
+import {
+  MinistryPlatformClient,
+  TableService,
+  ProcedureService,
+  parseFilterId,
+} from '@church/ministry-platform';
 
 // Re-export types for consumers
 export type { Session } from 'next-auth';
@@ -240,7 +245,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (simulationCookie) {
               const simulation = JSON.parse(simulationCookie.value);
 
-              if (simulation.type === 'impersonate' && simulation.contactId) {
+              // Only accept a strictly numeric Contact_ID before it is used in a $filter
+              const impersonateContactId = parseFilterId(simulation.contactId);
+
+              if (simulation.type === 'impersonate' && impersonateContactId !== null) {
                 // Fetch impersonated user's data using the same stored procedure
                 try {
                   // First get the User_GUID for the impersonated contact
@@ -249,7 +257,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     Display_Name: string;
                   }>('dp_Users', {
                     $select: 'User_GUID, Display_Name',
-                    $filter: `Contact_ID=${simulation.contactId}`,
+                    $filter: `Contact_ID=${impersonateContactId}`,
                     $top: 1,
                   });
 
@@ -278,7 +286,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                     session.simulation = {
                       type: 'impersonate',
-                      contactId: simulation.contactId,
+                      contactId: String(impersonateContactId),
                       originalUserId: session.user.id,
                       originalRoles: session.roles,
                       originalIsAdmin: session.isAdmin,
@@ -300,7 +308,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     // User has no MP account
                     session.simulation = {
                       type: 'impersonate',
-                      contactId: simulation.contactId,
+                      contactId: String(impersonateContactId),
                       originalUserId: session.user.id,
                       originalRoles: session.roles,
                       originalIsAdmin: session.isAdmin,
@@ -313,7 +321,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                   console.error('Error fetching impersonated user data:', error);
                   session.simulation = {
                     type: 'impersonate',
-                    contactId: simulation.contactId,
+                    contactId: String(impersonateContactId),
                     originalUserId: session.user.id,
                     originalRoles: session.roles,
                     originalIsAdmin: session.isAdmin,

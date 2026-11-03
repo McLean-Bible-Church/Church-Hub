@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { auth } from '@church/nextjs-auth';
-import { getContactById } from '@church/ministry-platform';
+import { getContactById, parseFilterId } from '@church/ministry-platform';
 
 /**
  * GET /api/admin/simulation/status
@@ -28,14 +28,21 @@ export async function GET() {
       return NextResponse.json({ active: false });
     }
 
-    const simulation = JSON.parse(simulationCookie.value);
+    let simulation;
+    try {
+      simulation = JSON.parse(simulationCookie.value);
+    } catch {
+      return NextResponse.json({ active: false });
+    }
 
     // If impersonating, fetch the user details
-    if (simulation.type === 'impersonate') {
-      const contact = await getContactById(
-        parseInt(simulation.contactId, 10),
-        parseInt(session.userId, 10)
-      );
+    if (simulation?.type === 'impersonate') {
+      const impersonatedContactId = parseFilterId(simulation.contactId);
+      if (impersonatedContactId === null) {
+        return NextResponse.json({ active: false });
+      }
+
+      const contact = await getContactById(impersonatedContactId, parseInt(session.userId, 10));
 
       if (contact) {
         return NextResponse.json({
@@ -55,7 +62,7 @@ export async function GET() {
     }
 
     // If simulating roles
-    if (simulation.type === 'roles') {
+    if (simulation?.type === 'roles') {
       return NextResponse.json({
         active: true,
         type: 'roles',

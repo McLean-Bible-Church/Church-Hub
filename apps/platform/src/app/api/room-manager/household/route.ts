@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
-import { MinistryPlatformClient, TableService } from '@church/ministry-platform';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { MinistryPlatformClient, TableService, parseFilterId } from '@church/ministry-platform';
 import { getHouseholdWithMembers } from '@/services/peopleSearchService';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const access = await requireApiAppAccess('room-manager', 'view');
+    if (!access.ok) return access.response;
 
-    const participantId = request.nextUrl.searchParams.get('participantId');
-    if (!participantId) {
+    const participantIdParam = request.nextUrl.searchParams.get('participantId');
+    if (!participantIdParam) {
       return NextResponse.json(
         { error: 'Missing required parameter: participantId' },
         { status: 400 }
       );
+    }
+    const participantId = parseFilterId(participantIdParam);
+    if (participantId === null) {
+      return NextResponse.json({ error: 'Invalid participantId' }, { status: 400 });
     }
 
     // Look up the Contact's Household_ID via Participant_Record
@@ -26,10 +28,14 @@ export async function GET(request: NextRequest) {
       Contact_ID: number;
       Household_ID: number | null;
     }>('Contacts', {
-      $filter: `Participant_Record = ${parseInt(participantId)}`,
+      $filter: `Participant_Record = ${participantId}`,
       $select: 'Contact_ID,Household_ID',
       $top: 1,
     });
+
+    if (contacts.length === 0) {
+      return NextResponse.json({ error: 'Participant not found' }, { status: 404 });
+    }
 
     const contactId = contacts[0].Contact_ID;
 

@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
 import { searchContacts } from '@/services/peopleSearchService';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const access = await requireApiAppAccess('people-search', 'view');
+    if (!access.ok) return access.response;
 
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
-    const skip = searchParams.get('skip');
+    const skipParam = searchParams.get('skip');
 
     if (!query) {
       return NextResponse.json([]);
     }
 
-    const contacts = await searchContacts(query, skip ? parseInt(skip) : 0);
+    const skip = skipParam && /^\d{1,5}$/.test(skipParam) ? parseInt(skipParam, 10) : 0;
+    const contacts = await searchContacts(query, skip);
 
     return NextResponse.json(contacts);
   } catch (error) {

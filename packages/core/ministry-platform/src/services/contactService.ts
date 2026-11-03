@@ -1,5 +1,6 @@
 import { MinistryPlatformClient } from '../core/client';
 import { TableService } from './tableService';
+import { filterId, likeContains, sanitizeSearchTerm } from '../utils/filter';
 
 interface Contact {
   Contact_ID: number;
@@ -29,15 +30,18 @@ export async function searchContacts(
   userId: number,
   limit: number = 20
 ): Promise<Contact[]> {
-  // Escape single quotes in query for SQL safety
-  const safeQuery = query.replace(/'/g, "''");
+  // Restrict to a safe character set/length, then quote-escape for the LIKE literal
+  const term = sanitizeSearchTerm(query);
+  if (term.length < 2) return [];
+  const like = likeContains(term);
+  const top = Math.min(Math.max(Math.trunc(Number(limit)) || 20, 1), 100);
 
   const contacts = await tableService.getTableRecords<Contact>('Contacts', {
     $select:
       'Contact_ID, Display_Name, Email_Address, First_Name, Last_Name, Nickname, User_Account, dp_fileUniqueId',
-    $filter: `(Display_Name LIKE '%${safeQuery}%' OR Email_Address LIKE '%${safeQuery}%') AND User_Account IS NOT NULL`,
+    $filter: `(Display_Name LIKE ${like} OR Email_Address LIKE ${like}) AND User_Account IS NOT NULL`,
     $orderby: 'Display_Name',
-    $top: limit,
+    $top: top,
   });
 
   return contacts;
@@ -53,7 +57,7 @@ export async function getContactById(contactId: number, userId: number): Promise
   const contacts = await tableService.getTableRecords<Contact>('Contacts', {
     $select:
       'Contact_ID, Display_Name, Email_Address, First_Name, Last_Name, Nickname, User_Account, dp_fileUniqueId',
-    $filter: `Contact_ID = ${contactId}`,
+    $filter: `Contact_ID = ${filterId(contactId)}`,
     $top: 1,
   });
 

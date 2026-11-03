@@ -30,7 +30,7 @@ export async function requireAppAccess(appKey: string): Promise<PermissionResult
     appKey,
     session.roles || [],
     session.email || null,
-    session.isAdmin
+    session.isAdmin === true
   );
 
   if (!permission.hasAccess) {
@@ -60,33 +60,12 @@ export async function getUserApps(type?: 'app' | 'dashboard') {
       return [];
     }
 
-    // TEMP WORKAROUND: If no roles and not admin, the stored procedure likely failed
-    // Show all apps for authenticated users until stored procedure is installed
-    const hasNoRoleData = !session.isAdmin && (!session.roles || session.roles.length === 0);
-
-    if (hasNoRoleData) {
-      console.log(
-        'No role data available - showing all apps (stored procedure may not be installed)'
-      );
-      const { getAllApplications } = await import('@church/database/neon');
-      const allApps = await getAllApplications();
-      const filtered = type ? allApps.filter((app) => app.type === type) : allApps;
-      return filtered.map((app) => ({
-        ...app,
-        permission: {
-          hasAccess: true,
-          canView: true,
-          canEdit: true,
-          canDelete: true,
-          reason: 'admin' as const,
-        },
-      }));
-    }
-
+    // Deny by default: a user with no roles (or a failed role lookup) only sees
+    // apps granted to their email. Never fall back to "all apps".
     return getAccessibleApplications(
       session.roles || [],
       session.email || null,
-      session.isAdmin,
+      session.isAdmin === true,
       type
     );
   } catch (error) {
@@ -118,7 +97,7 @@ export async function checkAccess(appKey: string): Promise<PermissionResult | nu
     appKey,
     session.roles || [],
     session.email || null,
-    session.isAdmin
+    session.isAdmin === true
   );
 
   return permission.hasAccess ? permission : null;

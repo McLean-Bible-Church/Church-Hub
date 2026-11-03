@@ -1,4 +1,10 @@
-import { MinistryPlatformClient, TableService, ProcedureService } from '@church/ministry-platform';
+import {
+  MinistryPlatformClient,
+  TableService,
+  ProcedureService,
+  filterId,
+  quoteFilterDate,
+} from '@church/ministry-platform';
 
 interface Event {
   Event_ID: number;
@@ -46,10 +52,10 @@ const procedureService = new ProcedureService(mpClient);
  * Get active congregations
  */
 export async function getCongregations(): Promise<Congregation[]> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = quoteFilterDate(new Date().toISOString().split('T')[0]);
 
   return tableService.getTableRecords<Congregation>('Congregations', {
-    $filter: `Start_Date <= '${today}' AND (End_Date IS NULL OR End_Date >= '${today}') AND Available_Online = 1`,
+    $filter: `Start_Date <= ${today} AND (End_Date IS NULL OR End_Date >= ${today}) AND Available_Online = 1`,
     $select: 'Congregation_ID, Congregation_Name',
     $orderby: 'Congregation_Name',
   });
@@ -64,11 +70,13 @@ export async function getEvents(
   congregationId: number | null
 ): Promise<Event[]> {
   // Base filter - adjust Event_Type_ID and Ministry_ID as needed per church
-  let filter = `CAST(Events.Event_Start_Date AS DATE) = '${eventDate}'`;
+  // quoteFilterDate/filterId throw FilterValueError on anything that is not a strict
+  // YYYY-MM-DD date / positive integer, so user input can never alter the filter.
+  let filter = `CAST(Events.Event_Start_Date AS DATE) = ${quoteFilterDate(eventDate)}`;
 
   // Add congregation filter if provided
   if (congregationId) {
-    filter += ` AND Events.Congregation_ID = ${congregationId}`;
+    filter += ` AND Events.Congregation_ID = ${filterId(congregationId)}`;
   }
 
   return tableService.getTableRecords<Event>('Events', {
@@ -87,10 +95,10 @@ export async function getEventsWithRooms(
   eventDate: string,
   congregationId: number | null
 ): Promise<Event[]> {
-  let filter = `CAST(Event_ID_Table.Event_Start_Date AS DATE) = '${eventDate}'`;
+  let filter = `CAST(Event_ID_Table.Event_Start_Date AS DATE) = ${quoteFilterDate(eventDate)}`;
 
   if (congregationId) {
-    filter += ` AND Event_ID_Table.Congregation_ID = ${congregationId}`;
+    filter += ` AND Event_ID_Table.Congregation_ID = ${filterId(congregationId)}`;
   }
 
   return tableService.getTableRecords<Event>('Event_Rooms', {
@@ -117,7 +125,7 @@ export async function getMetrics(): Promise<Metric[]> {
  */
 export async function getEventMetrics(eventId: number): Promise<EventMetric[]> {
   return tableService.getTableRecords<EventMetric>('Event_Metrics', {
-    $filter: `Event_ID = ${eventId}`,
+    $filter: `Event_ID = ${filterId(eventId)}`,
     $select: 'Event_Metric_ID, Event_ID, Metric_ID, Numerical_Value, Group_ID',
     $orderby: 'Metric_ID',
   });
@@ -167,7 +175,7 @@ export async function getHouseholdCongregation(householdId: number): Promise<num
   const rows = await tableService.getTableRecords<{ Congregation_ID: number | null }>(
     'Households',
     {
-      $filter: `Household_ID = ${householdId}`,
+      $filter: `Household_ID = ${filterId(householdId)}`,
       $select: 'Congregation_ID',
       $top: 1,
     }
