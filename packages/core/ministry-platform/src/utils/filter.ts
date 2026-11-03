@@ -110,7 +110,16 @@ export const MAX_SEARCH_TERM_LENGTH = 100;
  * the LIKE wildcards `%` and `[ ]`, parentheses, `=`, `;`, `&`, `/`, `\` — is
  * replaced with a space.
  */
-const SEARCH_DISALLOWED = /[^\p{L}\p{M}\p{N} @.'+\-_]/gu;
+const SEARCH_DISALLOWED = /[^\p{L}\p{M}\p{N} @.'+\-_]|\p{Lm}/gu;
+
+/**
+ * Apostrophe look-alikes (curly quotes from phone keyboards, modifier letters,
+ * primes, acute/grave accents). They are mapped to a plain ASCII `'` BEFORE
+ * quote-escaping so that no character can later be "best-fit" converted to a
+ * quote (e.g. on an nvarchar → varchar conversion) after escaping has happened.
+ */
+const APOSTROPHE_LOOKALIKES =
+  /[\u0060\u00B4\u02B9-\u02BC\u02BE\u02BF\u02C8\u02CA\u02CB\u2018\u2019\u201A\u201B\u2032\u2035\uFF07]/g;
 
 /**
  * Normalize a raw free-text search term to a safe character set and length.
@@ -119,13 +128,19 @@ const SEARCH_DISALLOWED = /[^\p{L}\p{M}\p{N} @.'+\-_]/gu;
  */
 export function sanitizeSearchTerm(raw: unknown, maxLength = MAX_SEARCH_TERM_LENGTH): string {
   if (typeof raw !== 'string') return '';
-  return raw
-    .normalize('NFKC')
-    .replace(SEARCH_DISALLOWED, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLength)
-    .trim();
+  return (
+    raw
+      // Map look-alikes both before NFKC (which decomposes e.g. U+00B4 into
+      // space + combining accent) and after it (NFKC can produce some of them).
+      .replace(APOSTROPHE_LOOKALIKES, "'")
+      .normalize('NFKC')
+      .replace(APOSTROPHE_LOOKALIKES, "'")
+      .replace(SEARCH_DISALLOWED, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, maxLength)
+      .trim()
+  );
 }
 
 /**
@@ -138,5 +153,9 @@ export function likeContains(term: unknown): string {
   if (typeof term !== 'string') throw new FilterValueError('Expected a string');
   const stripped = term.replace(/[%[\]]/g, '');
   if (stripped.length === 0) throw new FilterValueError('Empty search term');
+  // Defense in depth: never let an apostrophe look-alike through un-normalized.
+  if (/[\u02B9-\u02BC\u02C8\u2018\u2019\u201B\uFF07]/.test(stripped)) {
+    throw new FilterValueError('Unnormalized quote character; use sanitizeSearchTerm first');
+  }
   return `'%${escapeFilterString(stripped)}%'`;
 }

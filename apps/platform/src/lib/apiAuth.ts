@@ -119,5 +119,14 @@ export async function requireApiAppAccess(
     }
   }
 
+  if (!isAdmin && roles.length === 0) {
+    // Usually means api_TheHub_GetUserProfile_JSON failed or returned no roles for
+    // this user (the session callback then sets roles=[] / isAdmin=false). Logged so
+    // a permissions lockout is easy to diagnose; access is still denied.
+    console.warn(
+      `Authorization: denied ${keys.join('|')} (${level}) for a session with no roles and no admin flag. Check the user-profile stored procedure and app_permissions grants.`
+    );
+  }
+
   return deny(403, 'Forbidden');
 }

@@ -127,6 +127,20 @@ describe('sanitizeSearchTerm', () => {
     expect(sanitizeSearchTerm('O＇Brien')).toBe("O'Brien");
   });
 
+  it('maps apostrophe look-alikes and modifier letters to an ASCII quote (then escaped)', () => {
+    const lookalikes = ['\u2019', '\u2018', '\u02BC', '\u02B9', '\u02C8', '\u2032', '\u00B4', '`'];
+    for (const ch of lookalikes) {
+      const term = sanitizeSearchTerm(`O${ch}Brien`);
+      expect(term).toBe("O'Brien");
+      expect(likeContains(term)).toBe("'%O''Brien%'");
+    }
+  });
+
+  it('removes other modifier letters (Lm category)', () => {
+    expect(sanitizeSearchTerm('a\u02C6b')).toBe('a b');
+    expect(sanitizeSearchTerm('a\u02D0b')).toBe('a b');
+  });
+
   it('limits length and handles non-strings', () => {
     expect(sanitizeSearchTerm('a'.repeat(500))).toHaveLength(100);
     expect(sanitizeSearchTerm('abcdef', 3)).toBe('abc');
@@ -139,6 +153,11 @@ describe('likeContains', () => {
   it('wraps in %...% and escapes quotes', () => {
     expect(likeContains('smith')).toBe("'%smith%'");
     expect(likeContains("O'Brien")).toBe("'%O''Brien%'");
+  });
+
+  it('refuses un-normalized apostrophe look-alikes', () => {
+    expect(() => likeContains('O\u2019Brien')).toThrow(FilterValueError);
+    expect(() => likeContains('O\u02BCBrien')).toThrow(FilterValueError);
   });
 
   it('strips LIKE metacharacters even if the caller skipped sanitizeSearchTerm', () => {
