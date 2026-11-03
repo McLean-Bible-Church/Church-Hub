@@ -38,20 +38,13 @@ export async function GET() {
     }
 
     // Get user's accessible apps to filter history
-    const hasNoRoleData = !session.isAdmin && (!session.roles || session.roles.length === 0);
-
-    let accessibleRoutes: Set<string>;
-
-    if (hasNoRoleData) {
-      accessibleRoutes = new Set(history.map((h) => h.resultRoute));
-    } else {
-      const accessibleApps = await getAccessibleApplications(
-        session.roles || [],
-        session.email || null,
-        session.isAdmin
-      );
-      accessibleRoutes = new Set(accessibleApps.map((app) => app.route));
-    }
+    // Deny by default: no "everything is accessible" fallback when role data is missing.
+    const accessibleApps = await getAccessibleApplications(
+      session.roles || [],
+      session.email || null,
+      session.isAdmin === true
+    );
+    const accessibleRoutes = new Set(accessibleApps.map((app) => app.route));
 
     // Get all apps with their category info for enrichment
     const appsWithCategories = await db

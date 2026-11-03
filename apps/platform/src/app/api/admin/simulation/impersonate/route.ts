@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { auth } from '@church/nextjs-auth';
+import { parseFilterId } from '@church/ministry-platform';
 
 /**
  * POST /api/admin/simulation/impersonate
@@ -17,11 +18,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { contactId } = body;
+    const body = await request.json().catch(() => null);
+    // Must be a positive integer: it is later placed in an MP $filter
+    const contactId = parseFilterId(body?.contactId);
 
-    if (!contactId) {
-      return NextResponse.json({ error: 'Contact ID is required' }, { status: 400 });
+    if (contactId === null) {
+      return NextResponse.json({ error: 'Valid Contact ID is required' }, { status: 400 });
     }
 
     // Store impersonation in a cookie

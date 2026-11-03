@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./client": "./src/core/client.ts",
     "./tables": "./src/services/tableService.ts",
-    "./procedures": "./src/services/procedureService.ts"
+    "./procedures": "./src/services/procedureService.ts",
+    "./filter": "./src/utils/filter.ts"
   },
   "scripts": {
     "build": "echo 'Skipping build - using raw TypeScript files'",

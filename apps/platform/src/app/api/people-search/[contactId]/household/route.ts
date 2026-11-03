@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseFilterId } from '@church/ministry-platform';
 import { getContactById, getHouseholdWithMembers } from '@/services/peopleSearchService';
 
 export async function GET(
@@ -7,16 +8,17 @@ export async function GET(
   { params }: { params: Promise<{ contactId: string }> }
 ) {
   try {
-    const session = await auth();
+    const access = await requireApiAppAccess('people-search', 'view');
+    if (!access.ok) return access.response;
 
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { contactId: contactIdParam } = await params;
+    const contactId = parseFilterId(contactIdParam);
+    if (contactId === null) {
+      return NextResponse.json({ error: 'Invalid contact ID' }, { status: 400 });
     }
 
-    const { contactId } = await params;
-
     // Get contact to find household ID
-    const contact = await getContactById(parseInt(contactId));
+    const contact = await getContactById(contactId);
 
     if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
@@ -30,7 +32,7 @@ export async function GET(
     }
 
     // Get household with all members using stored procedure
-    const result = await getHouseholdWithMembers(contact.Household_ID, parseInt(contactId));
+    const result = await getHouseholdWithMembers(contact.Household_ID, contactId);
 
     if (!result) {
       return NextResponse.json({ error: 'Household not found' }, { status: 404 });
@@ -39,12 +41,6 @@ export async function GET(
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching household:', error);
-    return NextResponse.json(
-      {
-        error: 'Failed to fetch household',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch household' }, { status: 500 });
   }
 }

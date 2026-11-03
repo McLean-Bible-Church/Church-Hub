@@ -1,24 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseFilterDate, parseFilterId } from '@church/ministry-platform';
 import { getEvents, getEventsWithRooms } from '@/services/counterService';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Used by both Counter and Room Manager (requireRooms=true) to pick an event
+    const access = await requireApiAppAccess(['counter', 'room-manager'], 'view');
+    if (!access.ok) return access.response;
 
     const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get('date');
+    const dateParam = searchParams.get('date');
     const congregationIdParam = searchParams.get('congregationId');
 
-    if (!date) {
+    if (!dateParam) {
       return NextResponse.json({ error: 'Missing required parameter: date' }, { status: 400 });
     }
 
-    const congregationId = congregationIdParam ? parseInt(congregationIdParam) : null;
+    const date = parseFilterDate(dateParam);
+    if (date === null) {
+      return NextResponse.json({ error: 'Invalid date (expected YYYY-MM-DD)' }, { status: 400 });
+    }
+
+    let congregationId: number | null = null;
+    if (congregationIdParam) {
+      congregationId = parseFilterId(congregationIdParam);
+      if (congregationId === null) {
+        return NextResponse.json({ error: 'Invalid congregationId' }, { status: 400 });
+      }
+    }
     const requireRooms = searchParams.get('requireRooms') === 'true';
     const events = requireRooms
       ? await getEventsWithRooms(date, congregationId)

@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseCreateEventMetric } from '@/lib/validation/counter';
 import { createEventMetric } from '@/services/counterService';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const access = await requireApiAppAccess('counter', 'edit');
+    if (!access.ok) return access.response;
 
-    if (!session?.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let body: unknown = null;
+    try {
+      body = await request.json();
+    } catch {
+      // fall through to validation error
     }
 
-    const body = await request.json();
-    const { Event_ID, Metric_ID, Numerical_Value } = body;
-
-    if (!Event_ID || !Metric_ID || Numerical_Value === undefined) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    const input = parseCreateEventMetric(body);
+    if (!input) {
+      return NextResponse.json({ error: 'Missing or invalid required fields' }, { status: 400 });
     }
 
-    const userId = parseInt(session.userId, 10);
-    const eventMetric = await createEventMetric({ Event_ID, Metric_ID, Numerical_Value }, userId);
+    const eventMetric = await createEventMetric(input, access.userId!);
 
     return NextResponse.json(eventMetric, { status: 201 });
   } catch (error) {

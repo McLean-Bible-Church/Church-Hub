@@ -22,6 +22,8 @@ export default defineConfig({
       '@church/ministry-platform': path.resolve(__dirname, './packages/core/ministry-platform/src'),
       '@church/nextjs-ui': path.resolve(__dirname, './packages/nextjs/ui/src'),
       '@church/nextjs-auth': path.resolve(__dirname, './packages/nextjs/auth/src'),
+      // apps/platform path alias (`@/lib/...`, `@/services/...`)
+      '@': path.resolve(__dirname, './apps/platform/src'),
     },
   },
 });

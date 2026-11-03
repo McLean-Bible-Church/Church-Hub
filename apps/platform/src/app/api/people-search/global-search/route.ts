@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
 import { searchContacts } from '@/services/peopleSearchService';
 import type { GlobalSearchResult } from '@/types/globalSearch';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const access = await requireApiAppAccess('people-search', 'view');
+    if (!access.ok) return access.response;
 
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
     const limitParam = searchParams.get('limit');
-    const limit = limitParam ? parseInt(limitParam, 10) : 5;
+    const parsedLimit = limitParam ? parseInt(limitParam, 10) : 5;
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 20) : 5;
 
     if (!query) {
       return NextResponse.json([]);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseRoomManagerAction } from '@/lib/validation/roomManager';
 import {
   closeAllGroupsInRoom,
   updateEventRoom,
@@ -7,17 +8,26 @@ import {
   closeEventRooms,
   openEventRooms,
 } from '@/services/roomManagerService';
-import type { RoomManagerAction } from '@/types/roomManager';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Every action writes Event_Rooms / Event_Participants (check-in data)
+    const access = await requireApiAppAccess('room-manager', 'edit');
+    if (!access.ok) return access.response;
+
+    const userId = access.userId!;
+
+    let body: unknown = null;
+    try {
+      body = await request.json();
+    } catch {
+      // fall through to validation error
     }
 
-    const userId = parseInt(session.userId, 10);
-    const action: RoomManagerAction = await request.json();
+    const action = parseRoomManagerAction(body);
+    if (!action) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
 
     switch (action.type) {
       case 'closeAll':
@@ -86,12 +96,6 @@ export async function POST(request: NextRequest) {
       'Error executing room manager action:',
       error instanceof Error ? error.message : error
     );
-    return NextResponse.json(
-      {
-        error: 'Failed to execute action',
-        detail: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to execute action' }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseFilterId } from '@church/ministry-platform';
 import { getContactById } from '@/services/peopleSearchService';
 
 export async function GET(
@@ -7,14 +8,16 @@ export async function GET(
   { params }: { params: Promise<{ contactId: string }> }
 ) {
   try {
-    const session = await auth();
+    const access = await requireApiAppAccess('people-search', 'view');
+    if (!access.ok) return access.response;
 
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { contactId: contactIdParam } = await params;
+    const contactId = parseFilterId(contactIdParam);
+    if (contactId === null) {
+      return NextResponse.json({ error: 'Invalid contact ID' }, { status: 400 });
     }
 
-    const { contactId } = await params;
-    const contact = await getContactById(parseInt(contactId));
+    const contact = await getContactById(contactId);
 
     if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@church/nextjs-auth';
-import { getAccessibleApplications, getAllApplications } from '@church/database/neon';
+import { getAccessibleApplications } from '@church/database/neon';
 import type {
   GlobalSearchResponse,
   GlobalSearchResult,
@@ -132,28 +132,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Query must be at least 2 characters' }, { status: 400 });
     }
 
-    // Get accessible apps from Neon (respects permissions + is_active)
-    const hasNoRoleData = !session.isAdmin && (!session.roles || session.roles.length === 0);
-
-    let dbApps;
-    if (hasNoRoleData) {
-      dbApps = (await getAllApplications()).map((app) => ({
-        ...app,
-        permission: {
-          hasAccess: true,
-          canView: true,
-          canEdit: true,
-          canDelete: true,
-          reason: 'admin' as const,
-        },
-      }));
-    } else {
-      dbApps = await getAccessibleApplications(
-        session.roles || [],
-        session.email || null,
-        session.isAdmin
-      );
-    }
+    // Get accessible apps from Neon (respects permissions + is_active). Deny by
+    // default: no "all apps" fallback when role data is missing. Each app's search
+    // endpoint also enforces its own permission check.
+    const dbApps = await getAccessibleApplications(
+      session.roles || [],
+      session.email || null,
+      session.isAdmin === true
+    );
 
     const apps = dbApps.map(toSearchableApp);
 

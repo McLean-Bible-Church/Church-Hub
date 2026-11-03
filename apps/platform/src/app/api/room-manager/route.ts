@@ -1,20 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseFilterId } from '@church/ministry-platform';
 import { getRoomManagerData } from '@/services/roomManagerService';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const access = await requireApiAppAccess('room-manager', 'view');
+    if (!access.ok) return access.response;
 
-    const eventId = request.nextUrl.searchParams.get('eventId');
-    if (!eventId) {
+    const eventIdParam = request.nextUrl.searchParams.get('eventId');
+    if (!eventIdParam) {
       return NextResponse.json({ error: 'Missing required parameter: eventId' }, { status: 400 });
     }
+    const eventId = parseFilterId(eventIdParam);
+    if (eventId === null) {
+      return NextResponse.json({ error: 'Invalid eventId' }, { status: 400 });
+    }
 
-    const data = await getRoomManagerData(parseInt(eventId));
+    const data = await getRoomManagerData(eventId);
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching room manager data:', error);

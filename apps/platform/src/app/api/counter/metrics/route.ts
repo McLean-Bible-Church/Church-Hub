@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { requireApiAppAccess } from '@/lib/apiAuth';
 import { getMetrics } from '@/services/counterService';
 
 export async function GET() {
   try {
-    const session = await auth();
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const access = await requireApiAppAccess('counter', 'view');
+    if (!access.ok) return access.response;
 
     const metrics = await getMetrics();
 

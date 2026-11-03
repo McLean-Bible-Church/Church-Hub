@@ -1,20 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@church/nextjs-auth';
+import { parseFilterId } from '@church/ministry-platform';
+import { requireApiAppAccess } from '@/lib/apiAuth';
+import { parseDeleteEventMetric, parseUpdateEventMetric } from '@/lib/validation/counter';
 import { getEventMetrics, updateEventMetric, deleteEventMetric } from '@/services/counterService';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
-) {
-  try {
-    const session = await auth();
+type Params = { params: Promise<{ eventId: string }> };
 
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+async function readJson(request: NextRequest): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Confirm the Event_Metric record belongs to the event in the URL. */
+async function metricBelongsToEvent(eventMetricId: number, eventId: number): Promise<boolean> {
+  const metrics = await getEventMetrics(eventId);
+  return metrics.some((m) => m.Event_Metric_ID === eventMetricId);
+}
+
+export async function GET(request: NextRequest, { params }: Params) {
+  try {
+    const access = await requireApiAppAccess('counter', 'view');
+    if (!access.ok) return access.response;
+
+    const eventId = parseFilterId((await params).eventId);
+    if (eventId === null) {
+      return NextResponse.json({ error: 'Invalid eventId' }, { status: 400 });
     }
 
-    const { eventId } = await params;
-    const eventMetrics = await getEventMetrics(parseInt(eventId));
+    const eventMetrics = await getEventMetrics(eventId);
 
     return NextResponse.json(eventMetrics);
   } catch (error) {
@@ -23,25 +39,26 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: Params) {
   try {
-    const session = await auth();
+    const access = await requireApiAppAccess('counter', 'edit');
+    if (!access.ok) return access.response;
 
-    if (!session?.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const eventId = parseFilterId((await params).eventId);
+    if (eventId === null) {
+      return NextResponse.json({ error: 'Invalid eventId' }, { status: 400 });
     }
 
-    const { eventMetricId, data } = await request.json();
-
-    if (!eventMetricId) {
-      return NextResponse.json({ error: 'Missing eventMetricId' }, { status: 400 });
+    const input = parseUpdateEventMetric(await readJson(request));
+    if (!input) {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    const userId = parseInt(session.userId, 10);
-    await updateEventMetric(eventMetricId, data, userId);
+    if (!(await metricBelongsToEvent(input.eventMetricId, eventId))) {
+      return NextResponse.json({ error: 'Event metric not found' }, { status: 404 });
+    }
+
+    await updateEventMetric(input.eventMetricId, input.data, access.userId!);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -50,25 +67,26 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
-) {
+export async function DELETE(request: NextRequest, { params }: Params) {
   try {
-    const session = await auth();
+    const access = await requireApiAppAccess('counter', 'delete');
+    if (!access.ok) return access.response;
 
-    if (!session?.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const eventId = parseFilterId((await params).eventId);
+    if (eventId === null) {
+      return NextResponse.json({ error: 'Invalid eventId' }, { status: 400 });
     }
 
-    const { eventMetricId } = await request.json();
-
-    if (!eventMetricId) {
-      return NextResponse.json({ error: 'Missing eventMetricId' }, { status: 400 });
+    const input = parseDeleteEventMetric(await readJson(request));
+    if (!input) {
+      return NextResponse.json({ error: 'Missing or invalid eventMetricId' }, { status: 400 });
     }
 
-    const userId = parseInt(session.userId, 10);
-    await deleteEventMetric(eventMetricId, userId);
+    if (!(await metricBelongsToEvent(input.eventMetricId, eventId))) {
+      return NextResponse.json({ error: 'Event metric not found' }, { status: 404 });
+    }
+
+    await deleteEventMetric(input.eventMetricId, access.userId!);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@church/nextjs-auth';
-import { getNavigationData, getAllApplications } from '@church/database/neon';
-import { db, categories } from '@church/database';
-import { eq } from 'drizzle-orm';
+import { getNavigationData } from '@church/database/neon';
 
 /**
  * GET /api/nav
@@ -16,40 +14,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const hasNoRoleData = !session.isAdmin && (!session.roles || session.roles.length === 0);
-
-    let navData;
-    if (hasNoRoleData) {
-      // Fallback: show all categories and apps
-      const allCategories = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.isActive, true))
-        .orderBy(categories.sortOrder);
-
-      const allApps = await getAllApplications();
-      navData = allCategories.map((cat) => ({
-        ...cat,
-        apps: allApps
-          .filter((app) => app.categoryId === cat.id)
-          .map((app) => ({
-            ...app,
-            permission: {
-              hasAccess: true,
-              canView: true,
-              canEdit: true,
-              canDelete: true,
-              reason: 'admin' as const,
-            },
-          })),
-      }));
-    } else {
-      navData = await getNavigationData(
-        session.roles || [],
-        session.email || null,
-        session.isAdmin
-      );
-    }
+    // Deny by default: no "show everything" fallback when role data is missing.
+    const navData = await getNavigationData(
+      session.roles || [],
+      session.email || null,
+      session.isAdmin === true
+    );
 
     return NextResponse.json({
       categories: navData.map((cat) => ({

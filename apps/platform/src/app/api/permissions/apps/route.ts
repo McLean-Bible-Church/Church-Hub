@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@church/nextjs-auth';
-import { getAccessibleApplications, getAllApplications } from '@church/database/neon';
+import { getAccessibleApplications } from '@church/database/neon';
 
 /**
  * GET /api/permissions/apps
@@ -20,35 +20,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as 'app' | 'dashboard' | null;
 
-    // TEMP WORKAROUND: If no roles and not admin, the stored procedure likely failed
-    // Show all apps for authenticated users until stored procedure is installed
-    const hasNoRoleData = !session.isAdmin && (!session.roles || session.roles.length === 0);
-
-    let apps;
-    if (hasNoRoleData) {
-      console.log(
-        'No role data available - showing all apps (stored procedure may not be installed)'
-      );
-      const allApps = await getAllApplications();
-      const filtered = type ? allApps.filter((app) => app.type === type) : allApps;
-      apps = filtered.map((app) => ({
-        ...app,
-        permission: {
-          hasAccess: true,
-          canView: true,
-          canEdit: true,
-          canDelete: true,
-          reason: 'admin' as const,
-        },
-      }));
-    } else {
-      apps = await getAccessibleApplications(
-        session.roles || [],
-        session.email || null,
-        session.isAdmin,
-        type || undefined
-      );
-    }
+    // Deny by default: no "all apps" fallback when role data is missing.
+    const apps = await getAccessibleApplications(
+      session.roles || [],
+      session.email || null,
+      session.isAdmin === true,
+      type === 'app' || type === 'dashboard' ? type : undefined
+    );
 
     return NextResponse.json({
       apps: apps.map((app) => ({
