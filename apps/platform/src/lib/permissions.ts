@@ -30,7 +30,7 @@ export async function requireAppAccess(appKey: string): Promise<PermissionResult
     appKey,
     session.roles || [],
     session.email || null,
-    session.isAdmin
+    session.isAdmin === true
   );
 
   if (!permission.hasAccess) {
@@ -65,7 +65,7 @@ export async function getUserApps(type?: 'app' | 'dashboard') {
     return getAccessibleApplications(
       session.roles || [],
       session.email || null,
-      session.isAdmin,
+      session.isAdmin === true,
       type
     );
   } catch (error) {
@@ -97,7 +97,7 @@ export async function checkAccess(appKey: string): Promise<PermissionResult | nu
     appKey,
     session.roles || [],
     session.email || null,
-    session.isAdmin
+    session.isAdmin === true
   );
 
   return permission.hasAccess ? permission : null;

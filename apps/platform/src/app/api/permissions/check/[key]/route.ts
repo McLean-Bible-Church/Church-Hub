@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
       key,
       session.roles || [],
       session.email || null,
-      session.isAdmin
+      session.isAdmin === true
     );
 
     return NextResponse.json({
